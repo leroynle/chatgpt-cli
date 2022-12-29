@@ -68,56 +68,6 @@ func chatGPT3() {
 	// 	fmt.Printf("You answered %s\n", result)
 	// }
 
-	app := tview.NewApplication()
-
-	messages := tview.NewList()
-	inputField := tview.NewInputField()
-	usernameField := tview.NewInputField().SetLabel("Username: ")
-
-	// Set the default username.
-	usernameField.SetText("User")
-
-	// Create a layout that divides the screen into three rows.
-	// Create a layout that divides the screen into three rows.
-	layout := tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(tview.NewBox().SetBorder(true).SetTitle("Messages").AddItem(messages, 0, 1, false), 0, 1, false).
-		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
-			AddItem(tview.NewBox().SetBorder(true).AddItem(inputField, 1, 0, false), 1, 0, false).
-			AddItem(tview.NewBox().SetBorder(true).AddItem(inputField, 1, 0, false), 1, 0, false))
-
-	// Handle user input.
-	inputField.SetDoneFunc(func(key tcell.Key) {
-		if key == tcell.KeyEnter {
-			// Get the current timestamp and username.
-			timestampStr := time.Now().Format(time.RFC1123)
-			timestamp, err := time.Parse(time.RFC1123, timestampStr)
-			if err != nil {
-				fmt.Println(err)
-				return
-			}
-			username := usernameField.GetText()
-
-			// Create a new message.
-			message := &Message{
-				Timestamp: timestamp,
-				Username:  username,
-				Text:      inputField.GetText(),
-			}
-
-			// Clear the input field.
-			inputField.SetText("")
-
-			// Add the message to the list.
-			messages.AddItem(fmt.Sprintf("[%s] %s: %s", message.Timestamp, message.Username, message.Text), "", 0, nil)
-			app.SetFocus(messages)
-		}
-	})
-
-	// Start the application.
-	if err := app.SetRoot(layout, true).SetFocus(inputField).Run(); err != nil {
-		fmt.Println(err)
-	}
-
 	// req := gogpt.CompletionRequest{
 	// 	Model:     "text-ada-001",
 	// 	MaxTokens: 500,
@@ -130,4 +80,84 @@ func chatGPT3() {
 	// }
 	// fmt.Println(resp.Choices[0].Text)
 
+	app := tview.NewApplication()
+
+	// Create a new flex layout that divides the screen into two columns.
+	flex := tview.NewFlex().SetDirection(tview.FlexRow)
+
+	// Create a chat history box on the left.
+	history := tview.NewTextView().
+		SetDynamicColors(true).
+		SetRegions(true).
+		SetWrap(true)
+	history.SetBorder(true).SetTitle("Chat History")
+	flex.AddItem(history, 0, 1, true)
+
+	var input *tview.InputField
+	// Create an input field on the bottom.
+	input = tview.NewInputField().
+		SetLabel("Enter message: ").
+		SetFieldWidth(30).
+		SetDoneFunc(func(key tcell.Key) {
+			// When the user hits enter, add their message to the chat history.
+			history.Write([]byte(input.GetText()))
+			input.SetText("")
+		})
+	flex.AddItem(input, 1, 1, false)
+
+	// Start the application.
+	if err := app.SetRoot(flex, true).Run(); err != nil {
+		fmt.Println(err)
+	}
+
 }
+
+// app := tview.NewApplication()
+
+// 	messages := tview.NewList()
+// 	inputField := tview.NewInputField()
+// 	usernameField := tview.NewInputField().SetLabel("Username: ")
+
+// 	// Set the default username.
+// 	usernameField.SetText("User")
+
+// 	// Create a layout that divides the screen into three rows.
+// 	// Create a layout that divides the screen into three rows.
+// 	layout := tview.NewFlex().SetDirection(tview.FlexRow).
+// 		AddItem(tview.NewBox().SetBorder(true).SetTitle("Messages").AddItem(messages, 0, 1, false), 0, 1, false).
+// 		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
+// 			AddItem(tview.NewBox().SetBorder(true).AddItem(inputField, 1, 0, false), 1, 0, false).
+// 			AddItem(tview.NewBox().SetBorder(true).AddItem(inputField, 1, 0, false), 1, 0, false))
+
+// 	// Handle user input.
+// 	inputField.SetDoneFunc(func(key tcell.Key) {
+// 		if key == tcell.KeyEnter {
+// 			// Get the current timestamp and username.
+// 			timestampStr := time.Now().Format(time.RFC1123)
+// 			timestamp, err := time.Parse(time.RFC1123, timestampStr)
+// 			if err != nil {
+// 				fmt.Println(err)
+// 				return
+// 			}
+// 			username := usernameField.GetText()
+
+// 			// Create a new message.
+// 			message := &Message{
+// 				Timestamp: timestamp,
+// 				Username:  username,
+// 				Text:      inputField.GetText(),
+// 			}
+
+// 			// Clear the input field.
+// 			inputField.SetText("")
+
+// 			// Add the message to the list.
+// 			messages.AddItem(fmt.Sprintf("[%s] %s: %s", message.Timestamp, message.Username, message.Text), "", 0, nil)
+// 			app.SetFocus(messages)
+// 		}
+// 	})
+
+// 	// Start the application.
+// 	if err := app.SetRoot(layout, true).SetFocus(inputField).Run(); err != nil {
+// 		fmt.Println(err)
+// 	}
