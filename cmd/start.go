@@ -4,32 +4,35 @@ Copyright © 2022 NAME HERE <EMAIL ADDRESS>
 package cmd
 
 import (
+	"chatgpt-cli/util"
+	"context"
 	"fmt"
+	"log"
 	"time"
 
-	tcell "github.com/gdamore/tcell/v2"
-	tview "github.com/rivo/tview"
+	"github.com/fatih/color"
+	"github.com/gdamore/tcell/v2"
+	"github.com/rivo/tview"
+	gogpt "github.com/sashabaranov/go-gpt3"
 	"github.com/spf13/cobra"
 )
 
 // startCmd represents the start command
 var startCmd = &cobra.Command{
 	Use:   "start",
-	Short: "A brief description of your command",
-	Long: `A longer description that spans multiple lines and likely contains examples
-and usage of using your command. For example:
-
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
+	Short: "Start the Chat with ChatGPT",
+	Long: `To start the chat box, please use the "start" command,
+you will need to open a command prompt or terminal window on your computer.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		chatGPT3()
+		username, _ := cmd.Flags().GetString("user")
+		displayChat(username)
 	},
 }
 
 func init() {
 	rootCmd.AddCommand(startCmd)
-
+	var Username string
+	startCmd.Flags().StringVarP(&Username, "user", "u", "", "Your Username")
 	// Here you will define your flags and configuration settings.
 
 	// Cobra supports Persistent Flags which will work for this command
@@ -43,121 +46,110 @@ func init() {
 
 type Message struct {
 	Timestamp time.Time
-	Username  string
-	Text      string
+	// Username  string
+	Text string
 }
 
-func chatGPT3() {
-	// c := gogpt.NewClient("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")
-	// ctx := context.Background()
+func chatGPT3(prompt string) string {
+	envConfig, err := util.LoadConfig()
+	if err != nil {
+		log.Fatal("cannot load config:", err)
+	}
+	c := gogpt.NewClient(envConfig.ChatGPTToken)
+	ctx := context.Background()
 
-	// result := ""
+	req := gogpt.CompletionRequest{
+		Model:     "text-ada-001",
+		MaxTokens: 500,
+		Prompt:    prompt,
+	}
+	resp, err := c.CreateCompletion(ctx, req)
+	if err != nil {
+		return ""
+	}
+	return resp.Choices[0].Text
+}
 
-	// for result != ":exit" {
-	// 	label := emoji.WhiteQuestionMark
-	// 	prompt := promptui.Prompt{
-	// 		Label: label,
-	// 	}
-	// 	res, err := prompt.Run()
+func displayChat(username string) {
 
-	// 	if err != nil {
-	// 		fmt.Printf("Prompt failed %v\n", err)
-	// 		return
-	// 	}
-	// 	result = res
-	// 	fmt.Printf("You answered %s\n", result)
-	// }
-
-	// req := gogpt.CompletionRequest{
-	// 	Model:     "text-ada-001",
-	// 	MaxTokens: 500,
-	// 	Prompt:    "Hello, how are you?",
-	// }
-
-	// resp, err := c.CreateCompletion(ctx, req)
-	// if err != nil {
-	// 	return
-	// }
-	// fmt.Println(resp.Choices[0].Text)
+	// Colorize the string using the Color object
+	colorFuncGreen := color.New(color.FgGreen).SprintFunc()
+	colorFuncRed := color.New(color.FgRed).SprintFunc()
 
 	app := tview.NewApplication()
+	inputField := tview.NewInputField()
+	layout := tview.NewFlex().SetDirection(tview.FlexRow)
 
-	// Create a new flex layout that divides the screen into two columns.
-	flex := tview.NewFlex().SetDirection(tview.FlexRow)
+	introOutput := "Welcome to the ChatGPT " + colorFuncGreen(username) + "! Have fun and find something helpful with " + colorFuncRed("Alfred")
 
-	// Create a chat history box on the left.
+	// Create a text view for the introduction.
+	intro := tview.NewTextView().
+		SetDynamicColors(true).
+		SetRegions(true).
+		SetWrap(true)
+
+	writer := tview.ANSIWriter(intro)
+	writer.Write([]byte(introOutput))
+	intro.SetBorder(true)
+	layout.AddItem(intro, 3, 1, false)
+	// Create a layout that divides the screen into three rows.
+
 	history := tview.NewTextView().
 		SetDynamicColors(true).
 		SetRegions(true).
 		SetWrap(true)
 	history.SetBorder(true).SetTitle("Chat History")
-	flex.AddItem(history, 0, 1, true)
+	layout.AddItem(history, 0, 1, true)
 
-	var input *tview.InputField
-	// Create an input field on the bottom.
-	input = tview.NewInputField().
-		SetLabel("Enter message: ").
-		SetFieldWidth(30).
+	// AddItem(messages, 0, 1, false).
+	// AddItem(usernameField, 1, 0, false).
+
+	// Handle user input.
+	inputField.SetLabel("Enter message: ").
 		SetDoneFunc(func(key tcell.Key) {
-			// When the user hits enter, add their message to the chat history.
-			history.Write([]byte(input.GetText()))
-			input.SetText("")
-		})
-	flex.AddItem(input, 1, 1, false)
+			if key == tcell.KeyEnter {
+				// Get the current timestamp and username.
+				timestampStr := time.Now().Format(time.RFC1123)
+				timestamp, err := time.Parse(time.RFC1123, timestampStr)
+				if err != nil {
+					fmt.Println(err)
+					return
+				}
 
+				// Create a new message.
+				message := &Message{
+					Timestamp: timestamp,
+					Text:      inputField.GetText(),
+				}
+
+				// the chat will quit when user type :exit
+				if message.Text == ":exit" {
+					app.Stop()
+				}
+
+				// Input
+				writerHistory := tview.ANSIWriter(history)
+				output := fmt.Sprintf("[%s] %s: %s", message.Timestamp, colorFuncGreen(username), message.Text)
+				outputBytes := []byte(output + "\n")
+				writerHistory.Write(outputBytes)
+				history.ScrollToEnd()
+				inputField.SetText("")
+
+				//Response message from chatGPT
+				resp := chatGPT3(message.Text)
+				respFromChatGPT := fmt.Sprintf("[%s] %s: %s", message.Timestamp, colorFuncRed("Alfred"), resp)
+				outputBytes_1 := []byte(respFromChatGPT + "\n\n")
+				writerHistory.Write(outputBytes_1)
+				history.ScrollToEnd()
+
+				inputField.SetText("")
+			}
+		})
+	inputField.SetBorder(true)
+	layout.AddItem(inputField, 3, 1, true)
 	// Start the application.
-	if err := app.SetRoot(flex, true).Run(); err != nil {
+	if err := app.SetRoot(layout, true).SetFocus(inputField).Run(); err != nil {
 		fmt.Println(err)
 	}
 
 }
-
-// app := tview.NewApplication()
-
-// 	messages := tview.NewList()
-// 	inputField := tview.NewInputField()
-// 	usernameField := tview.NewInputField().SetLabel("Username: ")
-
-// 	// Set the default username.
-// 	usernameField.SetText("User")
-
-// 	// Create a layout that divides the screen into three rows.
-// 	// Create a layout that divides the screen into three rows.
-// 	layout := tview.NewFlex().SetDirection(tview.FlexRow).
-// 		AddItem(tview.NewBox().SetBorder(true).SetTitle("Messages").AddItem(messages, 0, 1, false), 0, 1, false).
-// 		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
-// 			AddItem(tview.NewBox().SetBorder(true).AddItem(inputField, 1, 0, false), 1, 0, false).
-// 			AddItem(tview.NewBox().SetBorder(true).AddItem(inputField, 1, 0, false), 1, 0, false))
-
-// 	// Handle user input.
-// 	inputField.SetDoneFunc(func(key tcell.Key) {
-// 		if key == tcell.KeyEnter {
-// 			// Get the current timestamp and username.
-// 			timestampStr := time.Now().Format(time.RFC1123)
-// 			timestamp, err := time.Parse(time.RFC1123, timestampStr)
-// 			if err != nil {
-// 				fmt.Println(err)
-// 				return
-// 			}
-// 			username := usernameField.GetText()
-
-// 			// Create a new message.
-// 			message := &Message{
-// 				Timestamp: timestamp,
-// 				Username:  username,
-// 				Text:      inputField.GetText(),
-// 			}
-
-// 			// Clear the input field.
-// 			inputField.SetText("")
-
-// 			// Add the message to the list.
-// 			messages.AddItem(fmt.Sprintf("[%s] %s: %s", message.Timestamp, message.Username, message.Text), "", 0, nil)
-// 			app.SetFocus(messages)
-// 		}
-// 	})
-
-// 	// Start the application.
-// 	if err := app.SetRoot(layout, true).SetFocus(inputField).Run(); err != nil {
-// 		fmt.Println(err)
-// 	}
